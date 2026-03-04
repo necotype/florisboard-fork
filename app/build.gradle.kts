@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
+import com.android.build.api.dsl.ApplicationExtension
+import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.agp.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.plugin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.mikepenz.aboutlibraries)
+    alias(libs.plugins.kotest)
+    alias(libs.plugins.kotlinx.kover)
 }
 
 val projectMinSdk: String by project
@@ -43,13 +46,16 @@ kotlin {
         jvmTarget.set(JvmTarget.JVM_11)
         freeCompilerArgs.set(listOf(
             "-opt-in=kotlin.contracts.ExperimentalContracts",
-            "-Xjvm-default=all-compatibility",
+            "-jvm-default=enable",
             "-Xwhen-guards",
+            "-Xexplicit-backing-fields",
+            "-Xcontext-parameters",
+            "-XXLanguage:+LocalTypeAliases",
         ))
     }
 }
 
-android {
+configure<ApplicationExtension> {
     namespace = "dev.patrickgold.florisboard"
     compileSdk = projectCompileSdk.toInt()
     buildToolsVersion = tools.versions.buildTools.get()
@@ -58,12 +64,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-    }
-
-    ksp {
-        arg("room.schemaLocation", "$projectDir/schemas")
-        arg("room.incremental", "true")
-        arg("room.expandProjection", "true")
     }
 
     defaultConfig {
@@ -81,12 +81,7 @@ android {
 
         sourceSets {
             maybeCreate("main").apply {
-                assets {
-                    srcDirs("src/main/assets")
-                }
-                java {
-                    srcDirs("src/main/kotlin")
-                }
+                assets.directories += "src/main/assets"
             }
         }
     }
@@ -112,11 +107,6 @@ android {
 
             isDebuggable = true
             isJniDebuggable = false
-
-            resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_debug")
-            resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_debug_round")
-            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_debug_foreground")
-            resValue("string", "floris_app_name", "FlorisBoard Debug")
         }
 
         create("beta") {
@@ -126,11 +116,6 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             isMinifyEnabled = true
             isShrinkResources = true
-
-            resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_beta")
-            resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_beta_round")
-            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_beta_foreground")
-            resValue("string", "floris_app_name", "FlorisBoard Beta")
         }
 
         named("release") {
@@ -139,15 +124,14 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             isMinifyEnabled = true
             isShrinkResources = true
-
-            resValue("mipmap", "floris_app_icon", "@mipmap/ic_app_icon_stable")
-            resValue("mipmap", "floris_app_icon_round", "@mipmap/ic_app_icon_stable_round")
-            resValue("drawable", "floris_app_icon_foreground", "@drawable/ic_app_icon_stable_foreground")
-            resValue("string", "floris_app_name", "@string/app_name")
         }
 
         create("benchmark") {
             initWith(getByName("release"))
+
+            applicationIdSuffix = ".bench"
+            versionNameSuffix = "-bench+${getGitCommitHash(short = true).get()}"
+
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
@@ -173,8 +157,21 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.incremental", "true")
+    arg("room.expandProjection", "true")
+}
+
 tasks.withType<Test> {
+    testLogging {
+        events = setOf(TestLogEvent.FAILED, TestLogEvent.PASSED, TestLogEvent.SKIPPED)
+    }
     useJUnitPlatform()
+}
+
+kover {
+    useJacoco()
 }
 
 dependencies {
@@ -201,6 +198,7 @@ dependencies {
     implementation(libs.androidx.profileinstaller)
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.window.core)
     implementation(libs.cache4k)
     implementation(libs.kotlin.reflect)
     implementation(libs.kotlinx.coroutines)
@@ -220,7 +218,12 @@ dependencies {
     implementation(projects.lib.native)
     implementation(projects.lib.snygg)
 
+    testImplementation(libs.kotest.assertions.core)
+    testImplementation(libs.kotest.property)
+    testImplementation(libs.kotest.runner.junit5)
     testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.turbine)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.espresso.core)
 }

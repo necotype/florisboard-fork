@@ -21,6 +21,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LocalContentColor
@@ -33,10 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
@@ -49,10 +48,9 @@ import dev.patrickgold.florisboard.ime.nlp.NlpInlineAutofill
 import dev.patrickgold.florisboard.ime.theme.ThemeManager
 import dev.patrickgold.florisboard.keyboardManager
 import dev.patrickgold.florisboard.lib.FlorisLocale
-import dev.patrickgold.florisboard.lib.observeAsNonNullState
 import dev.patrickgold.florisboard.nlpManager
 import dev.patrickgold.florisboard.themeManager
-import dev.patrickgold.jetpref.datastore.model.observeAsState
+import dev.patrickgold.jetpref.datastore.model.collectAsState
 import java.text.SimpleDateFormat
 import java.util.*
 import org.florisboard.lib.android.AndroidVersion
@@ -69,11 +67,11 @@ fun DevtoolsOverlay(modifier: Modifier = Modifier) {
     val keyboardManager by context.keyboardManager()
     val themeManager by context.themeManager()
 
-    val devtoolsEnabled by prefs.devtools.enabled.observeAsState()
-    val showPrimaryClip by prefs.devtools.showPrimaryClip.observeAsState()
-    val showInputStateOverlay by prefs.devtools.showInputStateOverlay.observeAsState()
-    val showSpellingOverlay by prefs.devtools.showSpellingOverlay.observeAsState()
-    val showInlineAutofillOverlay by prefs.devtools.showInlineAutofillOverlay.observeAsState()
+    val devtoolsEnabled by prefs.devtools.enabled.collectAsState()
+    val showPrimaryClip by prefs.devtools.showPrimaryClip.collectAsState()
+    val showInputStateOverlay by prefs.devtools.showInputStateOverlay.collectAsState()
+    val showSpellingOverlay by prefs.devtools.showSpellingOverlay.collectAsState()
+    val showInlineAutofillOverlay by prefs.devtools.showInlineAutofillOverlay.collectAsState()
     val prefsLoaded by appContext.preferenceStoreLoaded.collectAsState()
 
     val debugLayoutResult by keyboardManager.layoutManager.debugLayoutComputationResultFlow.collectAsState()
@@ -81,9 +79,8 @@ fun DevtoolsOverlay(modifier: Modifier = Modifier) {
 
     CompositionLocalProvider(
         LocalContentColor provides Color.White,
-        LocalLayoutDirection provides LayoutDirection.Ltr,
     ) {
-        Column(modifier = modifier) {
+        Column(modifier = modifier.fillMaxSize()) {
             if (devtoolsEnabled && showPrimaryClip) {
                 DevtoolsClipboardOverlay()
             }
@@ -181,7 +178,7 @@ private fun DevtoolsSpellingOverlay() {
     val context = LocalContext.current
     val nlpManager by context.nlpManager()
 
-    val debugOverlayVersion by nlpManager.debugOverlayVersion.observeAsNonNullState()
+    val debugOverlayVersion by nlpManager.debugOverlayVersion.collectAsState()
     val suggestionsInfos = remember(debugOverlayVersion) { nlpManager.debugOverlaySuggestionsInfos.snapshot() }
 
     val sortedEntries = suggestionsInfos.entries.sortedByDescending { it.key }

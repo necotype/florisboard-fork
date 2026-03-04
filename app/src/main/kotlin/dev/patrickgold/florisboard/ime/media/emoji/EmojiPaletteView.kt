@@ -47,13 +47,11 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -91,7 +89,7 @@ import dev.patrickgold.florisboard.ime.keyboard.FlorisImeSizing
 import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
 import dev.patrickgold.florisboard.keyboardManager
-import dev.patrickgold.jetpref.datastore.model.observeAsState
+import dev.patrickgold.jetpref.datastore.model.collectAsState
 import kotlinx.coroutines.launch
 import org.florisboard.lib.android.AndroidKeyguardManager
 import org.florisboard.lib.android.showShortToast
@@ -162,8 +160,8 @@ fun EmojiPaletteView(
 
     val deviceLocked = androidKeyguardManager.let { it.isDeviceLocked || it.isKeyguardLocked }
 
-    val preferredSkinTone by prefs.emoji.preferredSkinTone.observeAsState()
-    val emojiHistoryEnabled by prefs.emoji.historyEnabled.observeAsState()
+    val preferredSkinTone by prefs.emoji.preferredSkinTone.collectAsState()
+    val emojiHistoryEnabled by prefs.emoji.historyEnabled.collectAsState()
 
     var activeCategory by remember(emojiHistoryEnabled) {
         if (emojiHistoryEnabled) {
@@ -238,20 +236,20 @@ fun EmojiPaletteView(
         val inputFeedbackController = LocalInputFeedbackController.current
         val selectedTabIndex = categoryToPageNumber(activeCategory)
         val style = rememberSnyggThemeQuery(FlorisImeUi.MediaEmojiTab.elementName)
-        TabRow(
+        PrimaryTabRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(FlorisImeSizing.smartbarHeight),
             selectedTabIndex = selectedTabIndex,
             containerColor = Color.Transparent,
             contentColor = style.foreground(),
-            indicator = { tabPositions ->
+            indicator = {
                 val style = rememberSnyggThemeQuery(
                     elementName = FlorisImeUi.MediaEmojiTab.elementName,
                     selector = SnyggSelector.FOCUS,
                 )
                 TabRowDefaults.PrimaryIndicator(
-                    Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                    Modifier.tabIndicatorOffset(selectedTabIndex),
                     height = 4.dp,
                     color = style.foreground(),
                 )
@@ -360,34 +358,32 @@ fun EmojiPaletteView(
                     }
                 }
                 else -> key(emojiMapping) {
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        LazyVerticalGrid(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .florisScrollbar(lazyGridState),
-                            columns = GridCells.Adaptive(minSize = EmojiBaseWidth),
-                            state = lazyGridState,
-                        ) {
-                            if (emojiMapping.pinned.isNotEmpty()) {
-                                header("header_pinned") {
-                                    GridHeader(text = stringRes(R.string.emoji__history__pinned))
-                                }
-                                items(emojiMapping.pinned) { emojiSet ->
-                                    EmojiKeyWrapper(emojiSet, isPinned = true)
-                                }
+                    LazyVerticalGrid(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .florisScrollbar(lazyGridState),
+                        columns = GridCells.Adaptive(minSize = EmojiBaseWidth),
+                        state = lazyGridState,
+                    ) {
+                        if (emojiMapping.pinned.isNotEmpty()) {
+                            header("header_pinned") {
+                                GridHeader(text = stringRes(R.string.emoji__history__pinned))
                             }
-                            if (emojiMapping.recent.isNotEmpty()) {
-                                header("header_recent") {
-                                    GridHeader(text = stringRes(R.string.emoji__history__recent))
-                                }
-                                items(emojiMapping.recent) { emojiSet ->
-                                    EmojiKeyWrapper(emojiSet, isRecent = true)
-                                }
+                            items(emojiMapping.pinned) { emojiSet ->
+                                EmojiKeyWrapper(emojiSet, isPinned = true)
                             }
-                            if (emojiMapping.simple.isNotEmpty()) {
-                                items(emojiMapping.simple) { emojiSet ->
-                                    EmojiKeyWrapper(emojiSet)
-                                }
+                        }
+                        if (emojiMapping.recent.isNotEmpty()) {
+                            header("header_recent") {
+                                GridHeader(text = stringRes(R.string.emoji__history__recent))
+                            }
+                            items(emojiMapping.recent) { emojiSet ->
+                                EmojiKeyWrapper(emojiSet, isRecent = true)
+                            }
+                        }
+                        if (emojiMapping.simple.isNotEmpty()) {
+                            items(emojiMapping.simple) { emojiSet ->
+                                EmojiKeyWrapper(emojiSet)
                             }
                         }
                     }
@@ -542,8 +538,8 @@ private fun EmojiHistoryPopup(
     val scope = rememberCoroutineScope()
     val emojiKeyHeight = FlorisImeSizing.smartbarHeight
     val context = LocalContext.current
-    val pinnedUS by prefs.emoji.historyPinnedUpdateStrategy.observeAsState()
-    val recentUS by prefs.emoji.historyRecentUpdateStrategy.observeAsState()
+    val pinnedUS by prefs.emoji.historyPinnedUpdateStrategy.collectAsState()
+    val recentUS by prefs.emoji.historyRecentUpdateStrategy.collectAsState()
     val showMoveLeft = isCurrentlyPinned && !pinnedUS.isAutomatic || !recentUS.isAutomatic
     val showMoveRight = isCurrentlyPinned && !pinnedUS.isAutomatic || !recentUS.isAutomatic
 

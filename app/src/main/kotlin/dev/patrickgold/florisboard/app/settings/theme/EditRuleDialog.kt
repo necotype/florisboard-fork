@@ -83,6 +83,7 @@ import dev.patrickgold.florisboard.ime.keyboard.computeLabel
 import dev.patrickgold.florisboard.ime.text.key.KeyCode
 import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
+import dev.patrickgold.florisboard.ime.window.ImeWindowMode
 import dev.patrickgold.florisboard.keyboardManager
 import dev.patrickgold.florisboard.lib.NATIVE_NULLPTR
 import dev.patrickgold.florisboard.lib.compose.FlorisHyperlinkText
@@ -91,7 +92,6 @@ import dev.patrickgold.jetpref.material.ui.JetPrefAlertDialog
 import dev.patrickgold.jetpref.material.ui.JetPrefDropdown
 import dev.patrickgold.jetpref.material.ui.JetPrefTextField
 import dev.patrickgold.jetpref.material.ui.JetPrefTextFieldDefaults
-import org.florisboard.lib.android.showShortToast
 import org.florisboard.lib.android.showShortToastSync
 import org.florisboard.lib.android.stringRes
 import org.florisboard.lib.compose.FlorisChip
@@ -351,6 +351,15 @@ internal fun EditRuleDialog(
                     setAttributes = { currentRule = copy(attributes = it) },
                     level = level,
                 )
+
+                EnumLikeAttributeBox(
+                    text = "Target ime window mode",
+                    enumClass = ImeWindowMode::class,
+                    attribute = FlorisImeUi.Attr.WindowMode,
+                    attributes = attributes,
+                    setAttributes = { currentRule = copy(attributes = it) },
+                    level = level,
+                )
             }
         }
     }
@@ -369,7 +378,7 @@ private fun EditCodeValueDialog(
     val keyboardManager by context.keyboardManager()
 
     var inputCodeString by rememberSaveable(codeValue) {
-        val str = if (codeValue == KeyCode.UNSPECIFIED.toString()) "" else codeValue.toString()
+        val str = if (codeValue == KeyCode.UNSPECIFIED.toString()) "" else codeValue
         mutableStateOf(str)
     }
     val textKeyData = remember(inputCodeString) {

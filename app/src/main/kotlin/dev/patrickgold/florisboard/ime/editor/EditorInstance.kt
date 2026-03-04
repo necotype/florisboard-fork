@@ -138,11 +138,11 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
     }
 
     override fun determineComposingEnabled(): Boolean {
-        return nlpManager.isSuggestionOn()
+        return activeState.isComposingEnabled && nlpManager.isSuggestionOn()
     }
 
     override fun determineComposer(composerName: ExtensionComponentName): Composer {
-        return keyboardManager.resources.composers.value?.get(composerName) ?: Appender
+        return keyboardManager.resources.composers.value[composerName] ?: Appender
     }
 
     override fun shouldDetermineComposingRegion(editorInfo: FlorisEditorInfo): Boolean {

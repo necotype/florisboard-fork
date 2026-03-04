@@ -23,7 +23,6 @@ import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.MutableLiveData
 import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.R
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
@@ -47,7 +46,6 @@ import dev.patrickgold.florisboard.ime.input.InputShiftState
 import dev.patrickgold.florisboard.ime.nlp.ClipboardSuggestionCandidate
 import dev.patrickgold.florisboard.ime.nlp.PunctuationRule
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
-import dev.patrickgold.florisboard.ime.onehanded.OneHandedMode
 import dev.patrickgold.florisboard.ime.popup.PopupMappingComponent
 import dev.patrickgold.florisboard.ime.text.composing.Composer
 import dev.patrickgold.florisboard.ime.text.gestures.SwipeAction
@@ -70,7 +68,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -104,12 +103,12 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
 
     private val activeEvaluatorGuard = Mutex(locked = false)
     private var activeEvaluatorVersion = AtomicInteger(0)
-    private val _activeEvaluator = MutableStateFlow<ComputingEvaluator>(DefaultComputingEvaluator)
-    val activeEvaluator get() = _activeEvaluator.asStateFlow()
-    private val _activeSmartbarEvaluator = MutableStateFlow<ComputingEvaluator>(DefaultComputingEvaluator)
-    val activeSmartbarEvaluator get() = _activeSmartbarEvaluator.asStateFlow()
-    private val _lastCharactersEvaluator = MutableStateFlow<ComputingEvaluator>(DefaultComputingEvaluator)
-    val lastCharactersEvaluator get() = _lastCharactersEvaluator.asStateFlow()
+    val activeEvaluator: StateFlow<ComputingEvaluator>
+        field = MutableStateFlow<ComputingEvaluator>(DefaultComputingEvaluator)
+    val activeSmartbarEvaluator: StateFlow<ComputingEvaluator>
+        field = MutableStateFlow<ComputingEvaluator>(DefaultComputingEvaluator)
+    val lastCharactersEvaluator: StateFlow<ComputingEvaluator>
+        field = MutableStateFlow<ComputingEvaluator>(DefaultComputingEvaluator)
 
     val inputEventDispatcher = InputEventDispatcher.new(
         repeatableKeyCodes = intArrayOf(
@@ -126,7 +125,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
 
     init {
         scope.launch(Dispatchers.Main.immediate) {
-            resources.anyChanged.observeForever {
+            resources.anyChangedVersion.collectIn(scope) {
                 updateActiveEvaluators {
                     keyboardCache.clear()
                 }
@@ -175,7 +174,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         }
     }
 
-    private fun updateActiveEvaluators(action: () -> Unit = { }) = scope.launch {
+    fun updateActiveEvaluators(action: () -> Unit = { }) = scope.launch {
         activeEvaluatorGuard.withLock {
             action()
             val editorInfo = editorInstance.activeInfo
@@ -204,10 +203,10 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 key.compute(computingEvaluator)
                 key.computeLabelsAndDrawables(computingEvaluator)
             }
-            _activeEvaluator.value = computingEvaluator
-            _activeSmartbarEvaluator.value = computingEvaluator.asSmartbarQuickActionsEvaluator()
+            activeEvaluator.value = computingEvaluator
+            activeSmartbarEvaluator.value = computingEvaluator.asSmartbarQuickActionsEvaluator()
             if (computedKeyboard.mode == KeyboardMode.CHARACTERS) {
-                _lastCharactersEvaluator.value = computingEvaluator
+                lastCharactersEvaluator.value = computingEvaluator
             }
         }
     }
@@ -237,10 +236,6 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
      */
     fun shouldShowLanguageSwitch(): Boolean {
         return subtypeManager.subtypes.size > 1
-    }
-
-    suspend fun toggleOneHandedMode() {
-        prefs.keyboard.oneHandedModeEnabled.set(!prefs.keyboard.oneHandedModeEnabled.get())
     }
 
     fun executeSwipeAction(swipeAction: SwipeAction) {
@@ -678,6 +673,8 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     override fun onInputKeyDown(data: KeyData) {
+        val windowController = FlorisImeService.windowControllerOrNull()
+        windowController?.editor?.disableIfNoGestureInProgress()
         when (data.code) {
             KeyCode.ARROW_DOWN,
             KeyCode.ARROW_LEFT,
@@ -694,6 +691,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     override fun onInputKeyUp(data: KeyData) = activeState.batchEdit {
+        val windowController = FlorisImeService.windowControllerOrNull() ?: return@batchEdit
         when (data.code) {
             KeyCode.ARROW_DOWN,
             KeyCode.ARROW_LEFT,
@@ -724,15 +722,11 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                 clipboardManager.updatePrimaryClip(null)
                 appContext.showShortToastSync(R.string.clipboard__cleared_primary_clip)
             }
-            KeyCode.TOGGLE_COMPACT_LAYOUT -> scope.launch { toggleOneHandedMode() }
-            KeyCode.COMPACT_LAYOUT_TO_LEFT -> scope.launch {
-                prefs.keyboard.oneHandedMode.set(OneHandedMode.START)
-                toggleOneHandedMode()
-            }
-            KeyCode.COMPACT_LAYOUT_TO_RIGHT -> scope.launch {
-                prefs.keyboard.oneHandedMode.set(OneHandedMode.END)
-                toggleOneHandedMode()
-            }
+            KeyCode.TOGGLE_FLOATING_WINDOW -> windowController.actions.toggleFloatingWindow()
+            KeyCode.TOGGLE_COMPACT_LAYOUT -> windowController.actions.toggleCompactLayout()
+            KeyCode.COMPACT_LAYOUT_TO_LEFT -> windowController.actions.compactLayoutToLeft()
+            KeyCode.COMPACT_LAYOUT_TO_RIGHT -> windowController.actions.compactLayoutToRight()
+            KeyCode.TOGGLE_RESIZE_MODE -> windowController.editor.toggleEnabled()
             KeyCode.DELETE -> handleBackwardDelete(OperationUnit.CHARACTERS)
             KeyCode.DELETE_WORD -> handleBackwardDelete(OperationUnit.WORDS)
             KeyCode.ENTER -> handleEnter()
@@ -891,25 +885,18 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     inner class KeyboardManagerResources {
-        val composers = MutableLiveData<Map<ExtensionComponentName, Composer>>(emptyMap())
-        val currencySets = MutableLiveData<Map<ExtensionComponentName, CurrencySet>>(emptyMap())
-        val layouts = MutableLiveData<Map<LayoutType, Map<ExtensionComponentName, LayoutArrangementComponent>>>(emptyMap())
-        val popupMappings = MutableLiveData<Map<ExtensionComponentName, PopupMappingComponent>>(emptyMap())
-        val punctuationRules = MutableLiveData<Map<ExtensionComponentName, PunctuationRule>>(emptyMap())
-        val subtypePresets = MutableLiveData<List<SubtypePreset>>(emptyList())
+        val composers = MutableStateFlow<Map<ExtensionComponentName, Composer>>(emptyMap())
+        val currencySets = MutableStateFlow<Map<ExtensionComponentName, CurrencySet>>(emptyMap())
+        val layouts = MutableStateFlow<Map<LayoutType, Map<ExtensionComponentName, LayoutArrangementComponent>>>(emptyMap())
+        val popupMappings = MutableStateFlow<Map<ExtensionComponentName, PopupMappingComponent>>(emptyMap())
+        val punctuationRules = MutableStateFlow<Map<ExtensionComponentName, PunctuationRule>>(emptyMap())
+        val subtypePresets = MutableStateFlow<List<SubtypePreset>>(emptyList())
 
-        private val anyChangedGuard = Mutex(locked = false)
-        val anyChanged = MutableLiveData(Unit)
+        val anyChangedVersion = MutableStateFlow(0)
 
         init {
-            scope.launch(Dispatchers.Main.immediate) {
-                extensionManager.keyboardExtensions.observeForever { keyboardExtensions ->
-                    scope.launch {
-                        anyChangedGuard.withLock {
-                            parseKeyboardExtensions(keyboardExtensions)
-                        }
-                    }
-                }
+            extensionManager.keyboardExtensions.collectIn(scope) { keyboardExtensions ->
+                parseKeyboardExtensions(keyboardExtensions)
             }
         }
 
@@ -950,13 +937,13 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                     localSubtypePresets.add(0, localSubtypePresets.removeAt(index))
                 }
             }
-            subtypePresets.postValue(localSubtypePresets)
-            composers.postValue(localComposers)
-            currencySets.postValue(localCurrencySets)
-            layouts.postValue(localLayouts)
-            popupMappings.postValue(localPopupMappings)
-            punctuationRules.postValue(localPunctuationRules)
-            anyChanged.postValue(Unit)
+            subtypePresets.value = localSubtypePresets
+            composers.value = localComposers
+            currencySets.value = localCurrencySets
+            layouts.value = localLayouts
+            popupMappings.value = localPopupMappings
+            punctuationRules.value = localPunctuationRules
+            anyChangedVersion.update { it + 1 }
         }
     }
 
